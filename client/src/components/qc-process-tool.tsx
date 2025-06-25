@@ -21,6 +21,9 @@ const QCProcessTool = () => {
   // State for the Summary view
   const [showSummary, setShowSummary] = useState(false);
 
+  // State for copy feedback
+  const [copyStatus, setCopyStatus] = useState<'idle' | 'copying' | 'copied'>('idle');
+
   // State for criteria scores
   const [criteriaScores, setCriteriaScores] = useState({
     // Break Assessment
@@ -408,15 +411,29 @@ const QCProcessTool = () => {
               <h2 className="text-xl font-semibold">FEEDBACK SUMMARY</h2>
               <div className="flex items-center space-x-2">
                 <Button
-                  onClick={() => {
-                    const copyText = createCopyableText();
-                    navigator.clipboard.writeText(copyText);
+                  onClick={async () => {
+                    setCopyStatus('copying');
+                    try {
+                      const copyText = createCopyableText();
+                      await navigator.clipboard.writeText(copyText);
+                      setCopyStatus('copied');
+                      setTimeout(() => setCopyStatus('idle'), 2000);
+                    } catch (error) {
+                      setCopyStatus('idle');
+                    }
                   }}
                   variant="secondary"
                   size="sm"
-                  className="px-3 py-1 text-xs"
+                  className={`px-3 py-1 text-xs transition-all duration-200 ${
+                    copyStatus === 'copied' 
+                      ? 'bg-green-100 text-green-700 dark:bg-green-900 dark:text-green-300' 
+                      : copyStatus === 'copying'
+                      ? 'bg-blue-100 text-blue-700 dark:bg-blue-900 dark:text-blue-300'
+                      : ''
+                  }`}
+                  disabled={copyStatus === 'copying'}
                 >
-                  Copy
+                  {copyStatus === 'copying' ? 'Copying...' : copyStatus === 'copied' ? 'Copied!' : 'Copy'}
                 </Button>
                 <Button
                   variant="ghost"
