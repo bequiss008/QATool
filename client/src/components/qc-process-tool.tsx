@@ -158,8 +158,8 @@ const QCProcessTool = () => {
   // Group tags by category for vertical display
   const groupTagsByCategory = () => {
     const groups: Record<string, string[]> = {
-      'SM Tags': [],
-      'SX Tags': [],
+      'SM': [],
+      'SX': [],
       'Self-Harm': [],
       'Eating Disorder': [],
       'Violence': [],
@@ -168,9 +168,9 @@ const QCProcessTool = () => {
 
     Object.keys(tagList).forEach(tag => {
       if (tag.startsWith('sm')) {
-        groups['SM Tags'].push(tag);
+        groups['SM'].push(tag);
       } else if (tag.startsWith('sx')) {
-        groups['SX Tags'].push(tag);
+        groups['SX'].push(tag);
       } else if (tag.includes('selfharm')) {
         groups['Self-Harm'].push(tag);
       } else if (tag.includes('eating_disorder')) {
