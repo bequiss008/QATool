@@ -196,6 +196,8 @@ const QCProcessTool = () => {
     
     if (selectedAgentTags.length > 0 && selectedQATags.length > 0) {
       return `${formatTagList(selectedAgentTags)} should be ${formatTagList(selectedQATags)}`;
+    } else if (selectedAgentTags.length > 0 && selectedQATags.length === 0) {
+      return `${formatTagList(selectedAgentTags)} should be No Tag`;
     } else if (selectedQATags.length > 0) {
       return `Should be ${formatTagList(selectedQATags)}`;
     }
@@ -245,7 +247,7 @@ const QCProcessTool = () => {
         categorizedCriteria[categoryKey as keyof typeof categorizedCriteria].forEach(key => {
           const criteria = criteriaScores[key as keyof typeof criteriaScores];
           if (criteria.value !== null || criteria.notes) {
-            text += `- ${getCriteriaName(key)}: ${criteria.value !== null ? (criteria.value ? 'Yes' : 'No') : ''}\n`;
+            text += `- ${getCriteriaName(key)}: ${criteria.value !== null ? (criteria.value ? 'Correct' : 'Incorrect') : ''}\n`;
             if (criteria.notes) {
               text += `  ${criteria.notes}\n`;
             }
@@ -263,9 +265,15 @@ const QCProcessTool = () => {
         if (turn.notes) {
           text += `  Notes: ${turn.notes}\n`;
         }
-        const tagText = formatTagsForSummary(turn.agentTags, turn.qaTags);
-        if (tagText) {
-          text += `  Applied Tags: ${tagText}\n`;
+        const agentTags = Object.keys(turn.agentTags).filter(tag => turn.agentTags[tag]);
+        const qaTags = Object.keys(turn.qaTags).filter(tag => turn.qaTags[tag]);
+        if (agentTags.length > 0 && qaTags.length === 0) {
+          text += `  Applied Tags: ${formatTagsForSummary(turn.agentTags, turn.qaTags)}\n`;
+        } else {
+          const tagText = formatTagsForSummary(turn.agentTags, turn.qaTags);
+          if (tagText) {
+            text += `  Applied Tags: ${tagText}\n`;
+          }
         }
       });
     }
@@ -449,11 +457,11 @@ const QCProcessTool = () => {
                             if (criteria.value !== null || criteria.notes) {
                               return (
                                 <div key={key} className="mb-3">
-                                  <div className="flex justify-between items-center">
-                                    <span className="font-medium">- {getCriteriaName(key)}:</span>
+                                  <div className="mb-1">
+                                    <span className="font-medium">- {getCriteriaName(key)}: </span>
                                     {criteria.value !== null && (
                                       <span className="font-bold">
-                                        {criteria.value ? 'Yes' : 'No'}
+                                        {criteria.value ? 'Correct' : 'Incorrect'}
                                       </span>
                                     )}
                                   </div>
