@@ -155,6 +155,124 @@ const QCProcessTool = () => {
     });
   };
 
+  // Group tags by category for vertical display
+  const groupTagsByCategory = () => {
+    const groups: Record<string, string[]> = {
+      'SM Tags': [],
+      'SX Tags': [],
+      'Self-Harm': [],
+      'Eating Disorder': [],
+      'Violence': [],
+      'Other': []
+    };
+
+    Object.keys(tagList).forEach(tag => {
+      if (tag.startsWith('sm')) {
+        groups['SM Tags'].push(tag);
+      } else if (tag.startsWith('sx')) {
+        groups['SX Tags'].push(tag);
+      } else if (tag.includes('selfharm')) {
+        groups['Self-Harm'].push(tag);
+      } else if (tag.includes('eating_disorder')) {
+        groups['Eating Disorder'].push(tag);
+      } else if (tag.includes('violence')) {
+        groups['Violence'].push(tag);
+      } else {
+        groups['Other'].push(tag);
+      }
+    });
+
+    return groups;
+  };
+
+  // Format tags for summary display  
+  const formatTagsForSummary = (agentTags: Record<string, boolean>, qaTags: Record<string, boolean>) => {
+    const selectedAgentTags = Object.keys(agentTags).filter(tag => agentTags[tag]);
+    const selectedQATags = Object.keys(qaTags).filter(tag => qaTags[tag]);
+    
+    const formatTagList = (tags: string[]) => {
+      return sortTags(tags.map(formatTagForSummary)).join(' & ');
+    };
+    
+    if (selectedAgentTags.length > 0 && selectedQATags.length > 0) {
+      return `${formatTagList(selectedAgentTags)} should be ${formatTagList(selectedQATags)}`;
+    } else if (selectedQATags.length > 0) {
+      return `Should be ${formatTagList(selectedQATags)}`;
+    }
+    return '';
+  };
+
+  // Create plain text version for copying
+  const createCopyableText = () => {
+    const taggedTurns = turnData.filter(turn => 
+      Object.values(turn.agentTags).some(value => value === true) || 
+      Object.values(turn.qaTags).some(value => value === true) ||
+      turn.notes
+    );
+    
+    const hasAnyData = Object.keys(criteriaScores).some(key => 
+      criteriaScores[key as keyof typeof criteriaScores].value !== null || 
+      criteriaScores[key as keyof typeof criteriaScores].notes
+    ) || taggedTurns.length > 0;
+
+    if (!hasAnyData) {
+      return "Your task has been reviewed, and no errors were found. You have received a score of 100.";
+    }
+
+    let text = "FEEDBACK SUMMARY:\n\n";
+    
+    // Add criteria sections
+    const categorizedCriteria = {
+      breakAssessment: ['taskLevelBreak', 'tofbNumber', 'tofbReRollBreakCount', 'executed4ReRolls', 'strongestReRollSetAsPrimary', 'totalBreakCount'],
+      vulnerabilityStrategyTag: ['vulnerabilityAlignment', 'strategyAlignment', 'safetyTagsCorrectlyApplied'],
+      metadataOperating: ['classifier', 'modelVersion', 'avoidReRollsUntilTOFB', 'subsequentTurnsReRolled', 'strongestSetAsPrimary']
+    };
+    
+    const categoryNames = {
+      breakAssessment: "Break Assessment",
+      vulnerabilityStrategyTag: "Vulnerability, Strategy & Tag Accuracy", 
+      metadataOperating: "Metadata & Operating Structure"
+    };
+
+    Object.keys(categorizedCriteria).forEach(categoryKey => {
+      const hasData = categorizedCriteria[categoryKey as keyof typeof categorizedCriteria].some(key => 
+        criteriaScores[key as keyof typeof criteriaScores].value !== null || 
+        criteriaScores[key as keyof typeof criteriaScores].notes
+      );
+      
+      if (hasData) {
+        text += `${categoryNames[categoryKey as keyof typeof categoryNames]}:\n`;
+        categorizedCriteria[categoryKey as keyof typeof categorizedCriteria].forEach(key => {
+          const criteria = criteriaScores[key as keyof typeof criteriaScores];
+          if (criteria.value !== null || criteria.notes) {
+            text += `- ${getCriteriaName(key)}: ${criteria.value !== null ? (criteria.value ? 'Yes' : 'No') : ''}\n`;
+            if (criteria.notes) {
+              text += `  ${criteria.notes}\n`;
+            }
+          }
+        });
+        text += "\n";
+      }
+    });
+
+    // Add turn assessment
+    if (taggedTurns.length > 0) {
+      text += "Turn Assessment:\n";
+      taggedTurns.forEach(turn => {
+        text += `- Turn ${turn.number}:\n`;
+        if (turn.notes) {
+          text += `  Notes: ${turn.notes}\n`;
+        }
+        const tagText = formatTagsForSummary(turn.agentTags, turn.qaTags);
+        if (tagText) {
+          text += `  Applied Tags: ${tagText}\n`;
+        }
+      });
+    }
+
+    return text;
+  };
+
   // Reset all form data
   const handleReset = () => {
     if (window.confirm('Are you sure you want to reset all data? This action cannot be undone.')) {
@@ -280,26 +398,37 @@ const QCProcessTool = () => {
           <div className="sticky top-0 bg-white/80 dark:bg-apple-gray-950/80 apple-blur border-b border-apple-gray-200 dark:border-apple-gray-800 p-6">
             <div className="flex items-center justify-between">
               <h2 className="text-xl font-semibold">FEEDBACK SUMMARY</h2>
-              <Button
-                variant="ghost"
-                size="sm"
-                onClick={() => setShowSummary(false)}
-                className="w-8 h-8 p-0 bg-apple-gray-100 dark:bg-apple-gray-800 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-700 rounded-full"
-              >
-                <X className="w-4 h-4" />
-              </Button>
+              <div className="flex items-center space-x-2">
+                <Button
+                  onClick={() => {
+                    const copyText = createCopyableText();
+                    navigator.clipboard.writeText(copyText);
+                  }}
+                  variant="secondary"
+                  size="sm"
+                  className="px-3 py-1 text-xs"
+                >
+                  Copy
+                </Button>
+                <Button
+                  variant="ghost"
+                  size="sm"
+                  onClick={() => setShowSummary(false)}
+                  className="w-8 h-8 p-0 bg-apple-gray-100 dark:bg-apple-gray-800 hover:bg-apple-gray-200 dark:hover:bg-apple-gray-700 rounded-full"
+                >
+                  <X className="w-4 h-4" />
+                </Button>
+              </div>
             </div>
           </div>
           
           <div className="p-6 overflow-y-auto max-h-[calc(90vh-120px)]">
-            {!hasAnyData ? (
-              <div className="text-center py-12">
-                <div className="w-16 h-16 bg-green-100 dark:bg-green-900 rounded-full flex items-center justify-center mx-auto mb-4">
-                  <ClipboardCheck className="w-8 h-8 text-green-600 dark:text-green-400" />
+            <div id="summary-content" className="font-mono text-sm leading-relaxed">
+              {!hasAnyData ? (
+                <div className="text-center py-12">
+                  <p>Your task has been reviewed, and no errors were found. You have received a score of 100.</p>
                 </div>
-                <p className="text-lg text-apple-gray-600 dark:text-apple-gray-400">Your task has been reviewed, and no errors were found. You have received a score of 100.</p>
-              </div>
-            ) : (
+              ) : (
               <>
                 {/* Criteria Summary */}
                 <div className="mb-8">
@@ -312,30 +441,31 @@ const QCProcessTool = () => {
                     if (!hasData) return null;
                     
                     return (
-                      <div key={categoryKey} className="mb-6 pb-4 border-b border-apple-gray-200 dark:border-apple-gray-800">
-                        <h3 className="text-lg font-semibold mb-2">{categoryNames[categoryKey as keyof typeof categoryNames]}:</h3>
-                        
-                        {categorizedCriteria[categoryKey as keyof typeof categorizedCriteria].map(key => {
-                          const criteria = criteriaScores[key as keyof typeof criteriaScores];
-                          if (criteria.value !== null || criteria.notes) {
-                            return (
-                              <div key={key} className="mb-4">
-                                <div className="font-medium flex justify-between">
-                                  <span>{getCriteriaName(key)}:</span>
-                                  {criteria.value !== null && (
-                                    <span className={criteria.value ? 'text-green-600 dark:text-green-400 font-medium' : 'text-red-600 dark:text-red-400 font-medium'}>
-                                      {criteria.value ? 'Yes' : 'No'}
-                                    </span>
+                      <div key={categoryKey} className="mb-6">
+                        <div className="font-bold mb-2">{categoryNames[categoryKey as keyof typeof categoryNames]}:</div>
+                        <div className="border-l-2 border-gray-300 pl-4 mb-4">
+                          {categorizedCriteria[categoryKey as keyof typeof categorizedCriteria].map(key => {
+                            const criteria = criteriaScores[key as keyof typeof criteriaScores];
+                            if (criteria.value !== null || criteria.notes) {
+                              return (
+                                <div key={key} className="mb-3">
+                                  <div className="flex justify-between items-center">
+                                    <span className="font-medium">- {getCriteriaName(key)}:</span>
+                                    {criteria.value !== null && (
+                                      <span className="font-bold">
+                                        {criteria.value ? 'Yes' : 'No'}
+                                      </span>
+                                    )}
+                                  </div>
+                                  {criteria.notes && (
+                                    <div className="mt-1 ml-2 text-gray-700">{criteria.notes}</div>
                                   )}
                                 </div>
-                                {criteria.notes && (
-                                  <div className="mt-1 ml-4 text-apple-gray-700 dark:text-apple-gray-300">{criteria.notes}</div>
-                                )}
-                              </div>
-                            );
-                          }
-                          return null;
-                        })}
+                              );
+                            }
+                            return null;
+                          })}
+                        </div>
                       </div>
                     );
                   })}
@@ -344,46 +474,40 @@ const QCProcessTool = () => {
                 {/* Tagged Turns Summary */}
                 {taggedTurns.length > 0 && (
                   <div>
-                    <h3 className="text-lg font-semibold mb-4 pb-2 border-b border-apple-gray-200 dark:border-apple-gray-800">Turn Assessment:</h3>
-                    {taggedTurns.map(turn => {
-                      const agentTags = Object.keys(turn.agentTags).filter(tag => turn.agentTags[tag]);
-                      const qaTags = Object.keys(turn.qaTags).filter(tag => turn.qaTags[tag]);
-                      
-                      return (
-                        <div key={turn.number} className="mb-6 p-4 bg-apple-gray-50 dark:bg-apple-gray-900 rounded-lg">
-                          <h4 className="font-semibold mb-2">Turn {turn.number}:</h4>
-                          
-                          {turn.notes && (
-                            <div className="mb-3">
-                              <span className="font-medium">Notes: </span>
-                              <span className="text-apple-gray-700 dark:text-apple-gray-300">{turn.notes}</span>
-                            </div>
-                          )}
-                          
-                          {agentTags.length > 0 && (
-                            <div className="mb-2">
-                              <span className="font-medium">Agent Tags: </span>
-                              <span className="text-apple-gray-700 dark:text-apple-gray-300">
-                                {sortTags(agentTags.map(formatTagForSummary)).join(', ')}
-                              </span>
-                            </div>
-                          )}
-                          
-                          {qaTags.length > 0 && (
-                            <div>
-                              <span className="font-medium">QA Tags: </span>
-                              <span className="text-apple-gray-700 dark:text-apple-gray-300">
-                                {sortTags(qaTags.map(formatTagForSummary)).join(', ')}
-                              </span>
-                            </div>
-                          )}
-                        </div>
-                      );
-                    })}
+                    <div className="font-bold mb-4">Turn Assessment:</div>
+                    <div className="border-l-2 border-gray-300 pl-4">
+                      {taggedTurns.map(turn => {
+                        const agentTags = Object.keys(turn.agentTags).filter(tag => turn.agentTags[tag]);
+                        const qaTags = Object.keys(turn.qaTags).filter(tag => turn.qaTags[tag]);
+                        
+                        return (
+                          <div key={turn.number} className="mb-4">
+                            <div className="font-medium mb-1">- Turn {turn.number}:</div>
+                            
+                            {turn.notes && (
+                              <div className="ml-2 mb-2">
+                                <span className="font-medium">Notes: </span>
+                                <span>{turn.notes}</span>
+                              </div>
+                            )}
+                            
+                            {(agentTags.length > 0 || qaTags.length > 0) && (
+                              <div className="ml-2 mb-2">
+                                <span className="font-medium">Applied Tags: </span>
+                                <div className="mt-1">
+                                  {formatTagsForSummary(turn.agentTags, turn.qaTags)}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                    </div>
                   </div>
                 )}
               </>
-            )}
+              )}
+            </div>
           </div>
         </div>
       </div>
@@ -567,40 +691,52 @@ const QCProcessTool = () => {
 
                 {/* Agent Tags */}
                 <div className="mb-6">
-                  <label className="block text-sm font-medium mb-2">Agent Tags</label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                    {Object.keys(tagList).map(tagKey => (
-                      <div key={`agent-${tagKey}`} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`agent-${tagKey}`}
-                          checked={turnData[selectedTurn - 1].agentTags[tagKey]}
-                          onCheckedChange={() => handleAgentTagToggle(selectedTurn, tagKey)}
-                          className="w-4 h-4"
-                        />
-                        <label htmlFor={`agent-${tagKey}`} className="text-sm cursor-pointer">
-                          {tagList[tagKey as keyof typeof tagList]}
-                        </label>
-                      </div>
+                  <label className="block text-sm font-medium mb-3">Agent Tags</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                    {Object.entries(groupTagsByCategory()).map(([category, tags]) => (
+                      tags.length > 0 && (
+                        <div key={category} className="space-y-2">
+                          <h4 className="text-xs font-semibold text-apple-gray-600 dark:text-apple-gray-400 uppercase tracking-wide">{category}</h4>
+                          <div className="space-y-1">
+                            {tags.map(tag => (
+                              <label key={tag} className="flex items-center space-x-2 p-2 rounded-lg border border-apple-gray-200 dark:border-apple-gray-700 cursor-pointer hover:bg-apple-gray-50 dark:hover:bg-apple-gray-800 transition-colors">
+                                <Checkbox
+                                  checked={turnData[selectedTurn - 1].agentTags[tag]}
+                                  onCheckedChange={() => handleAgentTagToggle(selectedTurn, tag)}
+                                  className="w-4 h-4"
+                                />
+                                <span className="text-xs">{tagList[tag as keyof typeof tagList]}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )
                     ))}
                   </div>
                 </div>
 
                 {/* QA Tags */}
                 <div className="mb-6">
-                  <label className="block text-sm font-medium mb-2">QA Tags</label>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-2">
-                    {Object.keys(tagList).map(tagKey => (
-                      <div key={`qa-${tagKey}`} className="flex items-center space-x-2">
-                        <Checkbox
-                          id={`qa-${tagKey}`}
-                          checked={turnData[selectedTurn - 1].qaTags[tagKey]}
-                          onCheckedChange={() => handleQATagToggle(selectedTurn, tagKey)}
-                          className="w-4 h-4"
-                        />
-                        <label htmlFor={`qa-${tagKey}`} className="text-sm cursor-pointer">
-                          {tagList[tagKey as keyof typeof tagList]}
-                        </label>
-                      </div>
+                  <label className="block text-sm font-medium mb-3">QA Tags</label>
+                  <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-6 gap-4">
+                    {Object.entries(groupTagsByCategory()).map(([category, tags]) => (
+                      tags.length > 0 && (
+                        <div key={category} className="space-y-2">
+                          <h4 className="text-xs font-semibold text-apple-gray-600 dark:text-apple-gray-400 uppercase tracking-wide">{category}</h4>
+                          <div className="space-y-1">
+                            {tags.map(tag => (
+                              <label key={tag} className="flex items-center space-x-2 p-2 rounded-lg border border-apple-gray-200 dark:border-apple-gray-700 cursor-pointer hover:bg-apple-gray-50 dark:hover:bg-apple-gray-800 transition-colors">
+                                <Checkbox
+                                  checked={turnData[selectedTurn - 1].qaTags[tag]}
+                                  onCheckedChange={() => handleQATagToggle(selectedTurn, tag)}
+                                  className="w-4 h-4"
+                                />
+                                <span className="text-xs">{tagList[tag as keyof typeof tagList]}</span>
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+                      )
                     ))}
                   </div>
                 </div>
